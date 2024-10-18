@@ -1,0 +1,211 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SAM Template for Positiva Challenge
+
+Parameters:
+  AppointmentNotificationTopicArn:
+    Type: String
+    Default: "arn:aws:sns:REGION:ACCOUNT_ID:appointment-notifications"
+    Description: ARN of the SNS topic for appointment notifications
+
+  AppointmentNotificationEmail:
+    Type: String
+    Default: "clinic@gmail.com"
+    Description: Verified email for SES
+
+Resources:
+  # Lambdas
+  CreateAppointmentFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/handlers
+      Handler: create-appointment.handler
+      Runtime: nodejs20.x
+      Architectures:
+        - x86_64
+      MemorySize: 128
+      Timeout: 60
+      Description: Lambda function for Creating Appointments
+      Environment:
+        Variables:
+          SNS_TOPIC_ARN: !Ref AppointmentNotificationTopicArn
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PeruAppointmentsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ChileAppointmentsTable
+        - SNSPublishMessagePolicy:
+            TopicName: !Ref AppointmentNotificationTopicArn
+      Events:
+        CreateAppointmentApi:
+          Type: Api
+          Properties:
+            Path: /api/{country}/appointment/create
+            Method: post
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2020
+        Sourcemap: true
+        EntryPoints:
+          - create-appointment.ts
+
+  CancelAppointmentFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/handlers
+      Handler: cancel-appointment.handler
+      Runtime: nodejs20.x
+      Architectures:
+        - x86_64
+      MemorySize: 128
+      Timeout: 60
+      Description: Lambda function for Cancelling Appointments
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PeruAppointmentsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ChileAppointmentsTable
+      Events:
+        CancelAppointmentApi:
+          Type: Api
+          Properties:
+            Path: /api/{country}/appointment/cancel
+            Method: post
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2020
+        Sourcemap: true
+        EntryPoints:
+          - cancel-appointment.ts
+
+  ListAppointmentsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/handlers
+      Handler: list-appointments.handler
+      Runtime: nodejs20.x
+      Architectures:
+        - x86_64
+      MemorySize: 128
+      Timeout: 60
+      Description: Lambda function for Listing Appointments
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PeruAppointmentsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ChileAppointmentsTable
+      Events:
+        ListAppointmentsApi:
+          Type: Api
+          Properties:
+            Path: /api/{country}/appointment/
+            Method: get
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2020
+        Sourcemap: true
+        EntryPoints:
+          - list-appointments.ts
+
+  SendEmailFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/handlers
+      Handler: send-email.handler
+      Runtime: nodejs20.x
+      Architectures:
+        - x86_64
+      MemorySize: 128
+      Timeout: 60
+      Description: Lambda function for Sending Emails
+      Environment: 
+        Variables: 
+          SES_VERIFIED_EMAIL: !Ref AppointmentNotificationEmail
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PeruAppointmentsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ChileAppointmentsTable
+        - Statement:
+            - Effect: Allow
+              Action: ses:SendEmail
+              Resource: "*"
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2020
+        Sourcemap: true
+        EntryPoints:
+          - send-email.ts
+
+  # Tables 
+  PeruAppointmentsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: peru-appointments
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: appointmentId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: appointmentId
+          KeyType: RANGE
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+
+  ChileAppointmentsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: chile-appointments
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: appointmentId
+          AttributeType: S
+        - AttributeName: doctor
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: appointmentId
+          KeyType: RANGE
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+      GlobalSecondaryIndexes:
+        - IndexName: DoctorIndex
+          KeySchema:
+            - AttributeName: doctor
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+          ProvisionedThroughput:
+            ReadCapacityUnits: 5
+            WriteCapacityUnits: 5
+
+Outputs:
+  PeruAppointmentsFunctionArn:
+    Value: !GetAtt CreateAppointmentFunction.Arn
+    Export:
+      Name: PeruAppointmentsFunctionArn
+
+  ChileAppointmentsFunctionArn:
+    Value: !GetAtt CancelAppointmentFunction.Arn
+    Export:
+      Name: ChileAppointmentsFunctionArn
+

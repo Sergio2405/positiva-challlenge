@@ -1,0 +1,15 @@
+# node.js
+node_modules
+
+# built lambda
+.aws-sam
+
+# env and event files
+*.local.json
+
+# test
+coverage
+
+# OSX
+.DS_Store
+
